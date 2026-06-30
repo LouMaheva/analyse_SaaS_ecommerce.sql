@@ -1,9 +1,3 @@
--- =====================================================================
--- PROJET BI & DATA ANALYTICS : PERFORMANCE COMMERCIAL SAAS E-COMMERCE
--- Auteur : [Votre Prénom] [Votre Nom]
--- Objectif : Analyser l'activité des boutiques et des canaux (WhatsApp/FB)
--- =====================================================================
-
 -- 1. CRÉATION DES TABLES (DÉFINITION DU SCHÉMA RELATIONNEL)
 
 CREATE TABLE utilisateurs (
@@ -31,6 +25,7 @@ CREATE TABLE commandes (
     montant_livraison_cfa INT,
     montant_total_cfa INT,
     canal_provenance VARCHAR(50),
+    commune_livraison VARCHAR(100),
     FOREIGN KEY (unique_id) REFERENCES utilisateurs(unique_id)
 );
 
@@ -42,9 +37,7 @@ CREATE TABLE details_commandes (
     FOREIGN KEY (id_commande) REFERENCES commandes(id_commande)
 );
 
--- =====================================================================
 -- 2. REQUÊTES BUSINESS D'ANALYSE (PERFORMANCE & KEY METRICS)
--- =====================================================================
 
 -- REQUÊTE 1 : Performance globale de la plateforme (CA, Panier Moyen, Volume)
 SELECT 
@@ -53,7 +46,6 @@ SELECT
     ROUND(AVG(montant_articles_cfa), 0) AS panier_moyen_articles_cfa
 FROM commandes
 WHERE statut != 'Annulé';
-
 
 -- REQUÊTE 2 : WhatsApp vs Facebook - Quel canal convertit le mieux ?
 SELECT 
@@ -65,16 +57,15 @@ SELECT
 FROM commandes
 GROUP BY canal_provenance;
 
-
 -- REQUÊTE 3 : Analyse Logistique - Tarif moyen de livraison par quartier d'Abidjan
 SELECT 
-    quartier,
-    ROUND(AVG(tarif_cfa), 0) AS tarif_moyen_livraison_cfa,
-    COUNT(DISTINCT unique_id) AS nombre_boutiques_livrant_dans_cette_zone
-FROM livraisons
-GROUP BY quartier
+    commune_livraison AS quartier, -- 🌟 AJOUTÉ : Basé directement sur les ventes réelles
+    ROUND(AVG(montant_livraison_cfa), 0) AS tarif_moyen_livraison_cfa,
+    COUNT(id_commande) AS nombre_de_livraisons_effectuees
+FROM commandes
+WHERE statut = 'Terminé'
+GROUP BY commune_livraison
 ORDER BY tarif_moyen_livraison_cfa DESC;
-
 
 -- REQUÊTE 4 : Engagement Produit - Top 5 des boutiques les plus actives (SaaS Analytics)
 SELECT 
@@ -89,9 +80,23 @@ GROUP BY u.unique_id, u.nom_boutique, u.description
 ORDER BY total_commandes_enregistrées DESC
 LIMIT 5;
 
+-- REQUÊTE 5 : Analyse de la Rétention Hebdomadaire (SaaS Metrics)
+WITH premiere_activite AS (
+    SELECT unique_id, MIN(EXTRACT(WEEK FROM date_commande)) AS semaine_inscription
+    FROM commandes GROUP BY unique_id
+),
+activite_semaines AS (
+    SELECT DISTINCT c.unique_id, p.semaine_inscription, EXTRACT(WEEK FROM c.date_commande) AS semaine_activite
+    FROM commandes c JOIN premiere_activite p ON c.unique_id = p.unique_id
+)
+SELECT 
+    CONCAT('Semaine ', semaine_inscription) AS cohorte_vendeurs,
+    COUNT(DISTINCT CASE WHEN semaine_activite = semaine_inscription THEN unique_id END) AS inscrits,
+    COUNT(DISTINCT CASE WHEN semaine_activite = semaine_inscription + 1 THEN unique_id END) AS revenus_semaine_suivante
+FROM activite_semaines
+GROUP BY semaine_inscription;
 
--- REQUÊTE 5 : Audit de Qualité de Données (Data Integrity Check)
--- Vérifie que le montant total calculé depuis le panier (détails) correspond au montant de la table commande
+-- REQUÊTE 6 : Audit de Qualité de Données (Data Integrity Check)
 SELECT 
     c.id_commande,
     c.montant_articles_cfa AS montant_commande,
@@ -101,3 +106,4 @@ FROM commandes c
 JOIN details_commandes d ON c.id_commande = d.id_commande
 GROUP BY c.id_commande, c.montant_articles_cfa
 HAVING (c.montant_articles_cfa - SUM(d.quantite * d.prix_unitaire_cfa)) != 0;
+
