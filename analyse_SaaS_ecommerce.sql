@@ -59,7 +59,7 @@ GROUP BY canal_provenance;
 
 -- REQUÊTE 3 : Analyse Logistique - Tarif moyen de livraison par quartier d'Abidjan
 SELECT 
-    commune_livraison AS quartier, -- 🌟 AJOUTÉ : Basé directement sur les ventes réelles
+    commune_livraison AS quartier, 
     ROUND(AVG(montant_livraison_cfa), 0) AS tarif_moyen_livraison_cfa,
     COUNT(id_commande) AS nombre_de_livraisons_effectuees
 FROM commandes
